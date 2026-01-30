@@ -6,8 +6,6 @@ This platform demonstrates capabilities relevant to Nokia's network management e
 
 For detailed API documentation and test results, see [Nokia Customer Applications Eng.pdf](Nokia%20Customer%20Applications%20Eng.pdf).
 
-For production readiness assessment, see [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
-
 ## Performance Metrics
 
 ### Database Infrastructure
@@ -188,8 +186,6 @@ The system includes comprehensive resiliency testing through chaos engineering, 
 - **Scalability**: Connection pooling, time-series partitioning, and optimized queries
 - **Observability**: Health checks, structured logging, and monitoring endpoints
 - **Security**: Input validation, parameterized queries, and audit trails
-
-See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for detailed metrics and test results.
 
 ## Future Enhancements for Carrier-Grade Operations
 
