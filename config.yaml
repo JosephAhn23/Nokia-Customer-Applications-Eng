@@ -1,0 +1,116 @@
+# Network Monitor Configuration
+
+# Network Discovery Settings
+discovery:
+  default_subnet: "192.168.1.0/24"
+  scan_interval_seconds: 300
+  parallel_hosts: 50
+  ping_timeout_seconds: 2
+  nmap_timeout_seconds: 30
+  rate_limit_packets_per_second: 100
+  enable_os_detection: true
+  enable_port_scan: true
+  port_scan_ports: "22,80,443,8080,8443"
+  cache_results: true
+  cache_ttl_seconds: 600
+
+# Database Configuration
+database:
+  host: "localhost"
+  port: 5432
+  name: "netmon"
+  user: "netmon"
+  password: "netmon123"  # Set via environment variable NETMON_DB_PASSWORD
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+
+# Processing Pipeline
+processing:
+  enable_anomaly_detection: true
+  baseline_window_days: 7
+  latency_spike_threshold_multiplier: 2.5
+  uptime_threshold_for_downtime_alert: 0.95
+  enable_whois_lookup: false  # Can be slow
+  enable_oui_lookup: true
+
+# Alerting Configuration
+alerting:
+  enabled: true
+  channels:
+    email:
+      enabled: false
+      smtp_host: "smtp.example.com"
+      smtp_port: 587
+      smtp_user: ""
+      smtp_password: ""
+      from_address: "netmon@example.com"
+      to_addresses: ["admin@example.com"]
+    
+    telegram:
+      enabled: false
+      bot_token: ""  # Set via NETMON_TELEGRAM_TOKEN
+      chat_id: ""    # Set via NETMON_TELEGRAM_CHAT_ID
+    
+    dashboard:
+      enabled: true
+  
+  rules:
+    sudden_downtime:
+      channels: ["email", "telegram"]
+      throttle_minutes: 5
+      escalation:
+        - after_minutes: 15
+          add_channel: "sms"
+        - after_minutes: 60
+          severity: "critical"
+    
+    new_ports_opened:
+      channels: ["email", "dashboard"]
+      require_acknowledgment: true
+      whitelist_ports: [80, 443, 22]
+    
+    latency_spike:
+      channels: ["dashboard"]
+      threshold_minutes: 30
+      aggregate: true
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 4
+  enable_cors: true
+  cors_origins: ["*"]  # Restrict in production
+  api_key: ""  # Set via NETMON_API_KEY
+  enable_websocket: true
+
+# Frontend Configuration
+frontend:
+  build_dir: "/opt/netmon/frontend/dist"
+  serve_static: true
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "/var/log/netmon/netmon.log"
+  max_size_mb: 100
+  backup_count: 10
+  format: "json"  # json or text
+
+# Health Monitoring
+health:
+  check_interval_seconds: 60
+  disk_usage_threshold_percent: 85
+  database_timeout_seconds: 5
+  scan_timeout_seconds: 600
+
+# Maintenance
+maintenance:
+  data_retention_days: 90
+  cleanup_interval_hours: 24
+  backup_enabled: true
+  backup_retention_days: 30
+  backup_schedule: "0 2 * * *"  # Daily at 2 AM
+
+

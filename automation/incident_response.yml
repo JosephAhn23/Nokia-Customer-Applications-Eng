@@ -1,0 +1,44 @@
+---
+# Automated Incident Response Playbooks
+# Ansible playbook for self-healing infrastructure
+
+- name: Automated Incident Response Playbooks
+  hosts: all
+  become: yes
+  vars:
+    incident_severity: "{{ severity | default('medium') }}"
+    incident_type: "{{ type | default('unknown') }}"
+    incident_id: "{{ incident_id | default('unknown') }}"
+    affected_ip: "{{ affected_ip | default('') }}"
+    
+  tasks:
+  - name: Determine response strategy
+    set_fact:
+      response_strategy: >
+        {%- if incident_severity == 'critical' -%}
+          aggressive_recovery
+        {%- elif incident_severity == 'high' -%}
+          targeted_intervention
+        {%- else -%}
+          monitored_recovery
+        {%- endif %}
+    
+  - name: Log incident start
+    ansible.builtin.lineinfile:
+      path: /var/log/netmon/incidents.log
+      line: "{{ ansible_date_time.iso8601 }} | {{ incident_id }} | {{ incident_type }} | {{ incident_severity }} | STARTED"
+      create: yes
+    
+  - name: Execute severity-based response
+    include_tasks: "{{ response_strategy }}.yml"
+    vars:
+      incident_id: "{{ incident_id }}"
+      incident_type: "{{ incident_type }}"
+      affected_ip: "{{ affected_ip }}"
+    
+  - name: Log incident completion
+    ansible.builtin.lineinfile:
+      path: /var/log/netmon/incidents.log
+      line: "{{ ansible_date_time.iso8601 }} | {{ incident_id }} | {{ incident_type }} | {{ incident_severity }} | COMPLETED"
+
+

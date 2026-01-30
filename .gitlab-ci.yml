@@ -1,0 +1,214 @@
+# GitLab CI/CD Pipeline for Network Monitoring System
+# Production-grade deployment automation
+
+stages:
+  - test
+  - build
+  - security-scan
+  - deploy-staging
+  - canary
+  - deploy-production
+  - post-deployment
+
+variables:
+  DOCKER_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  K8S_NAMESPACE: network-monitoring
+  PYTHON_VERSION: "3.10"
+
+# UNIT TESTS
+test:
+  stage: test
+  image: python:${PYTHON_VERSION}
+  script:
+    - pip install -r requirements.txt
+    - pip install pytest pytest-cov pytest-asyncio
+    - pytest tests/ -v --cov=. --cov-report=xml --cov-report=html
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/
+    expire_in: 30 days
+  only:
+    - merge_requests
+    - main
+    - develop
+
+# BUILD DOCKER IMAGE
+build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $DOCKER_IMAGE .
+    - docker push $DOCKER_IMAGE
+  only:
+    - main
+    - develop
+    - tags
+
+# SECURITY SCANNING
+security-scan:
+  stage: security-scan
+  image: aquasec/trivy:latest
+  script:
+    - trivy image --severity HIGH,CRITICAL --exit-code 1 $DOCKER_IMAGE || true
+    - trivy fs --severity HIGH,CRITICAL --exit-code 1 . || true
+    - trivy repo --severity HIGH,CRITICAL --exit-code 1 . || true
+  artifacts:
+    reports:
+      container_scanning: gl-container-scanning-report.json
+      dependency_scanning: gl-dependency-scanning-report.json
+  allow_failure: true
+  only:
+    - main
+    - develop
+    - tags
+
+# PERFORMANCE TESTING
+performance-test:
+  stage: test
+  image: loadimpact/k6:latest
+  script:
+    - |
+      k6 run --out json=load-performance.json << 'EOF'
+      import http from 'k6/http';
+      import { check, sleep } from 'k6';
+      import { Rate } from 'k6/metrics';
+      
+      export let errorRate = new Rate('errors');
+      
+      export let options = {
+        stages: [
+          { duration: '2m', target: 100 },
+          { duration: '5m', target: 100 },
+          { duration: '2m', target: 500 },
+          { duration: '5m', target: 500 },
+          { duration: '2m', target: 0 },
+        ],
+        thresholds: {
+          'http_req_duration': ['p(99)<200'],
+          'errors': ['rate<0.01'],
+        },
+      };
+      
+      export default function() {
+        let res = http.get('http://staging.netmon/api/health');
+        check(res, {
+          'status is 200': (r) => r.status === 200,
+          'response time < 200ms': (r) => r.timings.duration < 200,
+        }) || errorRate.add(1);
+        
+        sleep(1);
+      }
+      EOF
+  artifacts:
+    reports:
+      load_performance: load-performance.json
+    paths:
+      - load-performance.json
+    expire_in: 30 days
+  only:
+    - main
+    - develop
+
+# DEPLOY TO STAGING
+deploy-staging:
+  stage: deploy-staging
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl config use-context staging
+    - kubectl set image deployment/netmon-api netmon-api=$DOCKER_IMAGE -n $K8S_NAMESPACE
+    - kubectl rollout status deployment/netmon-api -n $K8S_NAMESPACE
+  environment:
+    name: staging
+    url: https://staging.netmon.example.com
+  only:
+    - develop
+  when: manual
+
+# CANARY DEPLOYMENT
+deploy-canary:
+  stage: canary
+  image: bitnami/kubectl:latest
+  script:
+    - |
+      # Deploy to 10% of production
+      kubectl apply -f infrastructure/k8s/canary-deployment.yaml
+      
+      # Monitor canary health
+      CANARY_HEALTHY=false
+      for i in {1..30}; do
+        RESPONSE=$(kubectl exec deploy/netmon-canary -- curl -s http://localhost:8080/health 2>/dev/null || echo "failed")
+        if echo "$RESPONSE" | grep -q '"status":"healthy"'; then
+          echo "Canary health check passed"
+          CANARY_HEALTHY=true
+          break
+        else
+          echo "Canary health check failed, attempt $i/30"
+          sleep 10
+        fi
+      done
+      
+      if [ "$CANARY_HEALTHY" = false ]; then
+        echo "🚨 Canary deployment failed - initiating rollback"
+        kubectl rollout undo deployment/netmon-canary
+        exit 1
+      fi
+      
+      echo "✅ Canary deployment successful"
+  environment:
+    name: production/canary
+    url: https://canary.netmon.example.com
+  when: manual
+  only:
+    - main
+  allow_failure: false
+
+# DEPLOY TO PRODUCTION
+deploy-production:
+  stage: deploy-production
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl config use-context production
+    - kubectl set image deployment/netmon-api netmon-api=$DOCKER_IMAGE -n $K8S_NAMESPACE
+    - kubectl rollout status deployment/netmon-api -n $K8S_NAMESPACE
+    - |
+      # Verify deployment
+      sleep 30
+      curl -f http://production.netmon/api/health || exit 1
+  environment:
+    name: production
+    url: https://netmon.example.com
+  only:
+    - main
+  when: manual
+
+# POST-DEPLOYMENT TASKS
+docs-generate:
+  stage: post-deployment
+  image: python:${PYTHON_VERSION}
+  script:
+    - pip install pdoc3 sphinx
+    - |
+      # Generate API documentation
+      pdoc --html --output-dir docs/api api || true
+      
+      # Update changelog
+      git log --oneline $(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~10")..HEAD > CHANGELOG.md || true
+  artifacts:
+    paths:
+      - docs/
+      - CHANGELOG.md
+    expire_in: 30 days
+  only:
+    - main
+    - tags
+
+

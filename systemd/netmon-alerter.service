@@ -1,0 +1,43 @@
+[Unit]
+Description=Network Monitor Alerting Service
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=netmon
+Group=netmon
+WorkingDirectory=/opt/netmon
+ExecStart=/opt/netmon/venv/bin/python -m alerter.main
+Environment=PYTHONPATH=/opt/netmon
+Environment=NETMON_DB_HOST=localhost
+Environment=NETMON_DB_NAME=netmon
+Environment=NETMON_DB_USER=netmon
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=netmon-alerter
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/netmon/data /var/log/netmon
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target
+
+

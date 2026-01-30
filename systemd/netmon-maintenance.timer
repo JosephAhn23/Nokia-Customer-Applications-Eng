@@ -1,0 +1,13 @@
+[Unit]
+Description=Network Monitor Maintenance Timer
+Requires=netmon-maintenance.service
+
+[Timer]
+OnCalendar=daily
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+
+

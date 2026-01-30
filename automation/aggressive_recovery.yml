@@ -1,0 +1,144 @@
+---
+# Aggressive Recovery Procedures for Critical Incidents
+
+- name: Aggressive Recovery Procedures
+  block:
+  - name: Create forensics directory
+    ansible.builtin.file:
+      path: /var/forensics
+      state: directory
+      mode: '0755'
+  
+  - name: Capture forensic evidence
+    ansible.builtin.shell: |
+      TIMESTAMP="{{ ansible_date_time.iso8601 }}"
+      
+      # Capture network state
+      if command -v tcpdump &> /dev/null; then
+        timeout 60 tcpdump -c 1000 -w /var/forensics/incident_${TIMESTAMP}.pcap &
+      fi
+      
+      # Capture connection state
+      if command -v ss &> /dev/null; then
+        ss -tulpn > /var/forensics/connections_${TIMESTAMP}.txt
+      elif command -v netstat &> /dev/null; then
+        netstat -tulpn > /var/forensics/connections_${TIMESTAMP}.txt
+      fi
+      
+      # Capture routing table
+      ip route show > /var/forensics/routing_${TIMESTAMP}.txt || netstat -rn > /var/forensics/routing_${TIMESTAMP}.txt
+      
+      # Capture process list
+      ps aux > /var/forensics/processes_${TIMESTAMP}.txt
+      
+      # Capture system logs
+      journalctl --since "5 minutes ago" > /var/forensics/logs_${TIMESTAMP}.txt
+    register: forensics_result
+    ignore_errors: yes
+  
+  - name: Isolate affected systems
+    block:
+    - name: Block affected IP at firewall
+      ansible.builtin.iptables:
+        chain: INPUT
+        source: "{{ affected_ip }}"
+        jump: DROP
+        comment: "Auto-isolated during incident {{ incident_id }}"
+      when: affected_ip != ""
+      ignore_errors: yes
+    
+    - name: Block affected IP in FORWARD chain
+      ansible.builtin.iptables:
+        chain: FORWARD
+        source: "{{ affected_ip }}"
+        jump: DROP
+        comment: "Auto-isolated during incident {{ incident_id }}"
+      when: affected_ip != ""
+      ignore_errors: yes
+  
+  - name: Restore from last known good configuration
+    block:
+    - name: Check for golden configuration
+      ansible.builtin.stat:
+        path: "/opt/netmon/backups/config_golden_{{ incident_type }}.yml"
+      register: golden_config
+    
+    - name: Restore golden configuration
+      ansible.builtin.copy:
+        src: "/opt/netmon/backups/config_golden_{{ incident_type }}.yml"
+        dest: "/opt/netmon/config.yml"
+        force: yes
+        backup: yes
+      when: golden_config.stat.exists
+  
+  - name: Restart services with health checks
+    block:
+    - name: Restart discovery service
+      ansible.builtin.systemd:
+        name: netmon-discover
+        state: restarted
+        daemon_reload: yes
+      register: restart_discover
+      ignore_errors: yes
+    
+    - name: Restart processor service
+      ansible.builtin.systemd:
+        name: netmon-processor
+        state: restarted
+        daemon_reload: yes
+      register: restart_processor
+      ignore_errors: yes
+    
+    - name: Restart API service
+      ansible.builtin.systemd:
+        name: netmon-api
+        state: restarted
+        daemon_reload: yes
+      register: restart_api
+      ignore_errors: yes
+    
+    - name: Wait for services to start
+      ansible.builtin.pause:
+        seconds: 10
+  
+  - name: Validate recovery
+    block:
+    - name: Check API health
+      ansible.builtin.uri:
+        url: "http://localhost:8080/health"
+        return_content: yes
+        status_code: 200
+      register: health_check
+      retries: 10
+      delay: 5
+      until: health_check.status == 200
+      ignore_errors: yes
+    
+    - name: Verify database connectivity
+      ansible.builtin.command: pg_isready -h localhost -U netmon
+      register: db_check
+      retries: 5
+      delay: 2
+      until: db_check.rc == 0
+      ignore_errors: yes
+    
+    - name: Log recovery status
+      ansible.builtin.lineinfile:
+        path: /var/log/netmon/recovery.log
+        line: "{{ ansible_date_time.iso8601 }} | {{ incident_id }} | API: {{ 'OK' if health_check.status == 200 else 'FAILED' }} | DB: {{ 'OK' if db_check.rc == 0 else 'FAILED' }}"
+        create: yes
+  
+  rescue:
+  - name: Escalate to human operators
+    block:
+    - name: Log escalation
+      ansible.builtin.lineinfile:
+        path: /var/log/netmon/escalations.log
+        line: "{{ ansible_date_time.iso8601 }} | {{ incident_id }} | {{ incident_type }} | {{ incident_severity }} | AUTOMATED RECOVERY FAILED | ERROR: {{ ansible_failed_result.msg | default('Unknown error') }}"
+        create: yes
+    
+    - name: Send alert (if configured)
+      ansible.builtin.debug:
+        msg: "🚨 AUTOMATED RECOVERY FAILED - Human intervention required for incident {{ incident_id }}"
+
+
