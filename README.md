@@ -2,7 +2,11 @@
 
 I built a high-performance network monitoring and automation platform that demonstrates real-world skills in network management, API development, database optimization, and real-time monitoring. The system is production-ready and handles network device discovery, anomaly detection, and automated alerting.
 
+This platform demonstrates capabilities relevant to Nokia's network management ecosystem, including scalable architecture, resiliency testing, and production-grade operational practices.
+
 For detailed API documentation and test results, see [Nokia Customer Applications Eng.pdf](Nokia%20Customer%20Applications%20Eng.pdf).
+
+For production readiness assessment, see [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
 
 ## Performance Metrics
 
@@ -175,6 +179,28 @@ This project showcases expertise in:
 - Anomaly detection and alerting
 - Performance tracking and reporting
 - Incident management and resolution
+
+## Production Readiness
+
+The system includes comprehensive resiliency testing through chaos engineering, production-grade error handling, and scalable architecture. Key production features:
+
+- **Resiliency**: Tested against network failures, database outages, and resource exhaustion
+- **Scalability**: Connection pooling, time-series partitioning, and optimized queries
+- **Observability**: Health checks, structured logging, and monitoring endpoints
+- **Security**: Input validation, parameterized queries, and audit trails
+
+See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for detailed metrics and test results.
+
+## Future Enhancements for Carrier-Grade Operations
+
+This system provides a solid foundation that could be enhanced with:
+
+- **Network Protocol Support**: BGP session monitoring, MPLS tunnel tracking, SNMP v3 integration
+- **Nokia Platform Integration**: Integration with Nokia NSP and NFM-P platforms
+- **Advanced Analytics**: Predictive failure detection and automated remediation
+- **SLA Monitoring**: Service-level agreement compliance tracking
+
+These enhancements would position the system for deployment in carrier-grade network environments.
 
 ---
 
