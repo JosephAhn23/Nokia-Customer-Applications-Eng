@@ -1,4 +1,4 @@
-# Network Monitoring API - Learning Project
+# Network Monitoring API 
 
 A network monitoring API I built to demonstrate my understanding of API development, database design, and network monitoring concepts. This project shows foundational skills that I'm excited to apply and expand at Nokia.
 
@@ -41,13 +41,6 @@ I built this to learn and demonstrate:
 - Type hints and documentation
 - Error handling throughout
 - Logging and health checks
-
-## What This Is NOT
-
-- Not a production system deployed at scale
-- Not tested with 10,000+ devices
-- Not integrated with advanced network protocols (BGP/MPLS/SNMP v3)
-- Not integrated with Nokia's NSP or NFM-P platforms
 
 ## What I Want to Learn at Nokia
 
